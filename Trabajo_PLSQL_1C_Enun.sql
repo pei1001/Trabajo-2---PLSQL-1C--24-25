@@ -1,3 +1,9 @@
+-- Práctica 2 de la asignatura Aplicaciones de Bases de Datos
+
+-- Autor: Pablo Echavarría Íñiguez
+
+-- URL git: https://github.com/pei1001/Trabajo-2---PLSQL-1C--24-25
+
 DROP TABLE detalle_pedido CASCADE CONSTRAINTS;
 DROP TABLE pedidos CASCADE CONSTRAINTS;
 DROP TABLE platos CASCADE CONSTRAINTS;
