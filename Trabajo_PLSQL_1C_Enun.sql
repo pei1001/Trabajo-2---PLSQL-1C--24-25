@@ -58,18 +58,22 @@ CREATE OR REPLACE PROCEDURE registrar_pedido (
     arg_id_segundo_plato IN INTEGER DEFAULT NULL
 ) IS
     -- Excepciones personalizadas
+    ex_plato_no_disponible EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
+    
     ex_pedido_vacio EXCEPTION;
     PRAGMA EXCEPTION_INIT(ex_pedido_vacio, -20002);
 
-    ex_plato_no_disponible EXCEPTION;
-    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
-
     ex_personal_sobrecargado EXCEPTION;
     PRAGMA EXCEPTION_INIT(ex_personal_sobrecargado, -20003);
+    
+    ex_plato_no_existente EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_existente, -20004);
 
     -- Variables para almacenar información temporal
     v_pedidos_activos INTEGER;
     v_pedido_id       INTEGER;
+    v_plato_existente INTEGER;
 BEGIN
     -- Verificar si se proporcionaron platos para el pedido
     IF arg_id_primer_plato IS NULL AND arg_id_segundo_plato IS NULL THEN
@@ -78,28 +82,45 @@ BEGIN
 
     -- Comprobar la existencia y disponibilidad del primer plato, si se proporcionó
     IF arg_id_primer_plato IS NOT NULL THEN
-        -- Verificar si el plato existe y está disponible
+        -- Verificar si el plato existe
+        SELECT COUNT(*) INTO v_plato_existente
+        FROM platos
+        WHERE id_plato = arg_id_primer_plato;
+
+        IF v_plato_existente = 0 THEN
+            RAISE ex_plato_no_existente; -- El plato no existe
+        END IF;
+
+        -- Verificar si el plato está disponible
         SELECT COUNT(*) INTO v_pedidos_activos
         FROM platos
         WHERE id_plato = arg_id_primer_plato
           AND disponible = 1;
 
         IF v_pedidos_activos = 0 THEN
-            RAISE ex_plato_no_disponible;
+            RAISE ex_plato_no_disponible; -- El plato no está disponible
         END IF;
     END IF;
 
     -- Comprobar la existencia y disponibilidad del segundo plato, si se proporcionó
     IF arg_id_segundo_plato IS NOT NULL THEN
-        -- Verificar si el plato existe y está disponible
+        -- Verificar si el plato existe
+        SELECT COUNT(*) INTO v_plato_existente
+        FROM platos
+        WHERE id_plato = arg_id_segundo_plato;
 
+        IF v_plato_existente = 0 THEN
+            RAISE ex_plato_no_existente; -- El plato no existe
+        END IF;
+
+        -- Verificar si el plato está disponible
         SELECT COUNT(*) INTO v_pedidos_activos
         FROM platos
         WHERE id_plato = arg_id_segundo_plato
           AND disponible = 1;
 
         IF v_pedidos_activos = 0 THEN
-            RAISE ex_plato_no_disponible;
+            RAISE ex_plato_no_disponible; -- El plato no está disponible
         END IF;
     END IF;
 
