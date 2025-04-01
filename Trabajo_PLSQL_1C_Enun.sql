@@ -74,6 +74,7 @@ CREATE OR REPLACE PROCEDURE registrar_pedido (
     v_pedidos_activos INTEGER;
     v_pedido_id       INTEGER;
     v_plato_existente INTEGER;
+    v_total_pedido    DECIMAL(10, 2);
 BEGIN
     -- Verificar si se proporcionaron platos para el pedido
     IF arg_id_primer_plato IS NULL AND arg_id_segundo_plato IS NULL THEN
@@ -127,7 +128,8 @@ BEGIN
     -- Verificar la cantidad de pedidos activos del personal asignado
         SELECT pedidos_activos INTO v_pedidos_activos
         FROM personal_servicio
-        WHERE id_personal = arg_id_personal;
+        WHERE id_personal = arg_id_personal
+        FOR UPDATE;
 
         -- Comprobar si el personal ya tiene 5 pedidos activos
         IF v_pedidos_activos >= 5 THEN
@@ -138,7 +140,7 @@ BEGIN
     BEGIN
         -- Obtener el siguiente valor de la secuencia para el ID del pedido
         SELECT seq_pedidos.NEXTVAL INTO v_pedido_id FROM dual;
-
+        
         -- Insertar el nuevo pedido utilizando el valor generado de la secuencia
         INSERT INTO pedidos (id_pedido, id_cliente, id_personal, fecha_pedido, total)
         VALUES (v_pedido_id, arg_id_cliente, arg_id_personal, SYSDATE, 0);
@@ -153,6 +155,19 @@ BEGIN
             INSERT INTO detalle_pedido (id_pedido, id_plato, cantidad)
             VALUES (v_pedido_id, arg_id_segundo_plato, 1);
         END IF;
+        
+        -- Calcular el total del pedido sumando los precios de los platos
+        SELECT SUM(p.precio * dp.cantidad)
+        INTO v_total_pedido
+        FROM detalle_pedido dp
+        JOIN platos p ON dp.id_plato = p.id_plato
+        WHERE dp.id_pedido = v_pedido_id;
+
+        -- Actualizar el total en la tabla pedidos
+        UPDATE pedidos
+        SET total = v_total_pedido
+        WHERE id_pedido = v_pedido_id;
+
 
         -- Actualizar los pedidos activos del personal
         UPDATE personal_servicio
@@ -172,20 +187,32 @@ END;
 
 ------ Deja aquí tus respuestas a las preguntas del enunciado:
 -- NO SE CORREGIRÁN RESPUESTAS QUE NO ESTÉN AQUÍ (utiliza el espacio que necesites para cada una)
+--
 -- * P4.1 ¿Como garantizas en tu codigo que un miembro del persona de servicio no supere el lımite de pedidos activos?
 --
+-- Se realiza un select del número de pedidos activos dónde el id del empleado sea igual al argumento pasado a la función y 
+-- con un if se comprueba que este número sea menor al límite de pedidos activos, en este caso 5
+--  
 -- * P4.2 ¿Cómo evitas que dos transacciones concurrentes asignen un pedido al mismo personal de servicio cuyos pedidos activos estan a punto de superar el límite?
--- 
--- * P4.3 Una vez hechas las comprobaciones en los pasos 1 y 2, 
--- ¿podrías asegurar que el pedido se puede realizar de manera correcta en el paso 4 y no se generan inconsistencias? ¿Por qué?Recuerda que trabajamos en entornos con conexiones .concurrentes.
 --
--- * P4.4 Si modificásemos la tabla de personal servicio añadiendo CHECK (pedido activos ≤ 5), ¿Qué implicaciones tendr´ıa entu código? 
+-- Se hace uso de un FOR UPDATE en el select mencionado en el apartado anterior para así asegurarse de que la fila del id
+-- quede bloqueada para otras transacciones hasta que la actual se complete mediante un commit o rollback, previniendo así
+-- que varias transacciones puedan modificar el valor de pedidos_activos a la vez.
+--
+-- * P4.3 Una vez hechas las comprobaciones en los pasos 1 y 2, 
+-- ¿podrías asegurar que el pedido se puede realizar de manera correcta en el paso 3 y no se generan inconsistencias? ¿Por qué?Recuerda que trabajamos en entornos con conexiones concurrentes.
+--
+-- Aunque se haya tenido en cuenta el posible caso de que dos transacciones quieran aumentar el número de pedidos activos de un empleado simultáneamente usando el for update, hay otros casos que podrían dar problemas, como que un plato cambie su estado de disponibilidad debido a otra transacción concurrente.
+--
+-- * P4.4 Si modificásemos la tabla de personal servicio añadiendo CHECK (pedido activos ≤ 5), ¿Qué implicaciones tendr´ıa entu código?
 -- ¿Cómo afectaría en la gestión de excepciones? 
 -- Describe en detalle las modificaciones que deberías hacer en tu código para mejorar tu solución ante esta situación (puedes añadir pseudocódigo).
 --
+--Pregunta omitida por error en el enunciado.
+--
 -- * P4.5¿Qué tipo de estrategia de programación has utilizado? ¿Cómo puede verse en tu código?
 -- 
-
+-- Se ha usado una estrategia basada en la programación defensiva, esto se puede ver en el número de SELECT usados para comprobar todas las condiciones necesarias para poder realizar la transacción. Una vez se han comprobado se hacen las actualizaciones y el commit en caso de que se cumplan las condiciones y el rollback en caso contrario. 
 
 create or replace
 procedure reset_seq( p_seq_name varchar )
@@ -241,18 +268,18 @@ exec inicializa_test;
 
 CREATE OR REPLACE PROCEDURE test_registrar_pedido IS
     -- Excepciones personalizadas
+    ex_plato_no_disponible EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
+   
     ex_pedido_vacio EXCEPTION;
     PRAGMA EXCEPTION_INIT(ex_pedido_vacio, -20002);
 
-    ex_plato_no_existe EXCEPTION;
-    PRAGMA EXCEPTION_INIT(ex_plato_no_existe, -20004);
-
-    ex_plato_no_disponible EXCEPTION;
-    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
-
     ex_personal_sobrecargado EXCEPTION;
     PRAGMA EXCEPTION_INIT(ex_personal_sobrecargado, -20003);
-
+    
+    ex_plato_no_existe EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_existe, -20004);
+    
     -- Variables para los identificadores de prueba
     v_id_cliente INTEGER;
     v_id_personal INTEGER;
