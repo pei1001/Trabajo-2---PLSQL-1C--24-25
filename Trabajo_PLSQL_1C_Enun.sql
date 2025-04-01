@@ -31,7 +31,7 @@ CREATE TABLE platos (
     id_plato INTEGER PRIMARY KEY,
     nombre VARCHAR2(100) NOT NULL,
     precio DECIMAL(10, 2) NOT NULL,
-    disponible BOOLEAN DEFAULT TRUE
+    disponible INTEGER DEFAULT 1 CHECK (DISPONIBLE in (0,1))
 );
 
 CREATE TABLE pedidos (
@@ -120,9 +120,9 @@ begin
     insert into Personal_servicio (id_personal, nombre, apellido, pedidos_activos) values (1, 'Carlos', 'Lopez', 0);
     insert into Personal_servicio (id_personal, nombre, apellido, pedidos_activos) values (2, 'Maria', 'Fernandez', 5);
     
-    insert into Platos (id_plato, nombre, precio, disponible) values (1, 'Sopa', 10.0, TRUE);
-    insert into Platos (id_plato, nombre, precio, disponible) values (2, 'Pasta', 12.0, TRUE);
-    insert into Platos (id_plato, nombre, precio, disponible) values (3, 'Carne', 15.0, FALSE);
+    insert into Platos (id_plato, nombre, precio, disponible) values (1, 'Sopa', 10.0, 1);
+    insert into Platos (id_plato, nombre, precio, disponible) values (2, 'Pasta', 12.0, 1);
+    insert into Platos (id_plato, nombre, precio, disponible) values (3, 'Carne', 15.0, 0);
 
     commit;
 end;
@@ -132,25 +132,72 @@ exec inicializa_test;
 
 -- Completa lost test, incluyendo al menos los del enunciado y añadiendo los que consideres necesarios
 
-create or replace procedure test_registrar_pedido is
-begin
-	 
-  --caso 1 Pedido correct, se realiza
-  begin
-    inicializa_test;
-  end;
-  
-  -- Idem para el resto de casos
+CREATE OR REPLACE PROCEDURE test_registrar_pedido IS
+    -- Excepciones personalizadas
+    ex_pedido_vacio EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_pedido_vacio, -20002);
 
-  /* - Si se realiza un pedido vac´ıo (sin platos) devuelve el error -200002.
-     - Si se realiza un pedido con un plato que no existe devuelve en error -20004.
-     - Si se realiza un pedido que incluye un plato que no est´a ya disponible devuelve el error -20001.
-     - Personal de servicio ya tiene 5 pedidos activos y se le asigna otro pedido devuelve el error -20003
-     - ... los que os puedan ocurrir que puedan ser necesarios para comprobar el correcto funcionamiento del procedimiento
-*/
-  
-end;
-/
+    ex_plato_no_existe EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_existe, -20004);
+
+    ex_plato_no_disponible EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
+
+    ex_personal_sobrecargado EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_personal_sobrecargado, -20003);
+
+    -- Variables para los identificadores de prueba
+    v_id_cliente INTEGER;
+    v_id_personal INTEGER;
+    v_id_primer_plato INTEGER;
+    v_id_segundo_plato INTEGER;
+BEGIN
+    -- Inicializar los datos de prueba
+    inicializa_test;
+
+    -- Caso 1: Pedido correcto, se realiza exitosamente
+    BEGIN
+        -- Asignar valores válidos a las variables
+        v_id_cliente := 1;
+        v_id_personal := 1;
+        v_id_primer_plato := 1;
+        v_id_segundo_plato := 2;
+
+        -- Intentar registrar el pedido
+        registrar_pedido(v_id_cliente, v_id_personal, v_id_primer_plato, v_id_segundo_plato);
+        DBMS_OUTPUT.PUT_LINE('Caso 1: Pedido registrado correctamente.');
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 1: Error inesperado - ' || SQLERRM);
+    END;
+
+    -- Caso 2: Pedido vacío (sin platos), debe devolver el error -20002
+    BEGIN
+        registrar_pedido(v_id_cliente, v_id_personal, NULL, NULL);
+        DBMS_OUTPUT.PUT_LINE('Caso 2: Error - Se esperaba una excepción por pedido vacío.');
+    EXCEPTION
+        WHEN ex_pedido_vacio THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 2: Excepción capturada correctamente: Pedido vacío.');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 2: Error inesperado - ' || SQLERRM);
+    END;
+
+    -- Caso 3: Pedido con un plato que no existe, debe devolver el error -20004
+    BEGIN
+        registrar_pedido(v_id_cliente, v_id_personal, 999, NULL);
+        DBMS_OUTPUT.PUT_LINE('Caso 3: Error - Se esperaba una excepción por plato inexistente.');
+    EXCEPTION
+        WHEN ex_plato_no_existe THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 3: Excepción capturada correctamente: Plato no existe.');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 3: Error inesperado - ' || SQLERRM);
+    END;
+
+    -- Caso 4: Pedido con un plato no disponible, debe devolver el error -20001
+    BEGIN
+        -- Suponiendo que el plato con ID 3 no está disponible
+        registrar_pedido(v_id_cliente
+
 
 
 set serveroutput on;
