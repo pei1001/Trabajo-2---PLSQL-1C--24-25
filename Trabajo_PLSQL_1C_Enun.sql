@@ -125,30 +125,33 @@ BEGIN
     END IF;
 
     -- Verificar la cantidad de pedidos activos del personal asignado
-    SELECT COUNT(*) INTO v_pedidos_activos
-    FROM pedidos
-    WHERE id_personal = arg_id_personal;
+        SELECT pedidos_activos INTO v_pedidos_activos
+        FROM personal_servicio
+        WHERE id_personal = arg_id_personal;
 
-    -- Comprobar si el personal ya tiene 5 pedidos activos
-    IF v_pedidos_activos >= 5 THEN
-        RAISE ex_personal_sobrecargado;
-    END IF;
+        -- Comprobar si el personal ya tiene 5 pedidos activos
+        IF v_pedidos_activos >= 5 THEN
+            RAISE ex_personal_sobrecargado;
+        END IF;
 
     -- Iniciar la transacción
     BEGIN
-        -- Insertar el nuevo pedido
+        -- Obtener el siguiente valor de la secuencia para el ID del pedido
+        SELECT seq_pedidos.NEXTVAL INTO v_pedido_id FROM dual;
+
+        -- Insertar el nuevo pedido utilizando el valor generado de la secuencia
         INSERT INTO pedidos (id_pedido, id_cliente, id_personal, fecha_pedido, total)
-        VALUES (1, arg_id_cliente, arg_id_personal, SYSDATE, 0);
+        VALUES (v_pedido_id, arg_id_cliente, arg_id_personal, SYSDATE, 0);
        
         -- Insertar los detalles del pedido
         IF arg_id_primer_plato IS NOT NULL THEN
             INSERT INTO detalle_pedido (id_pedido, id_plato, cantidad)
-            VALUES (1, arg_id_primer_plato, 1);
+            VALUES (v_pedido_id, arg_id_primer_plato, 1);
         END IF;
 
         IF arg_id_segundo_plato IS NOT NULL THEN
             INSERT INTO detalle_pedido (id_pedido, id_plato, cantidad)
-            VALUES (1, arg_id_segundo_plato, 1);
+            VALUES (v_pedido_id, arg_id_segundo_plato, 1);
         END IF;
 
         -- Actualizar los pedidos activos del personal
@@ -166,9 +169,6 @@ BEGIN
     END;
 END;
 /
-
-
-
 
 ------ Deja aquí tus respuestas a las preguntas del enunciado:
 -- NO SE CORREGIRÁN RESPUESTAS QUE NO ESTÉN AQUÍ (utiliza el espacio que necesites para cada una)
