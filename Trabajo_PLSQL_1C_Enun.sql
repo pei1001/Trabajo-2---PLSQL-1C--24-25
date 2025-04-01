@@ -50,21 +50,107 @@ CREATE TABLE detalle_pedido (
 );
 
 
-	
 -- Procedimiento a implementar para realizar la reserva
-create or replace procedure registrar_pedido(
-    arg_id_cliente      INTEGER, 
-    arg_id_personal     INTEGER, 
-    arg_id_primer_plato INTEGER DEFAULT NULL,
-    arg_id_segundo_plato INTEGER DEFAULT NULL
-) is 
- begin
-  null; -- sustituye esta línea por tu código
-end;
+CREATE OR REPLACE PROCEDURE registrar_pedido (
+    arg_id_cliente      IN INTEGER,
+    arg_id_personal     IN INTEGER,
+    arg_id_primer_plato IN INTEGER DEFAULT NULL,
+    arg_id_segundo_plato IN INTEGER DEFAULT NULL
+) IS
+    -- Excepciones personalizadas
+    ex_pedido_vacio EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_pedido_vacio, -20002);
+
+    ex_plato_no_disponible EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_plato_no_disponible, -20001);
+
+    ex_personal_sobrecargado EXCEPTION;
+    PRAGMA EXCEPTION_INIT(ex_personal_sobrecargado, -20003);
+
+    -- Variables para almacenar información temporal
+    v_pedidos_activos INTEGER;
+    v_pedido_id       INTEGER;
+BEGIN
+    -- Verificar si se proporcionaron platos para el pedido
+    IF arg_id_primer_plato IS NULL AND arg_id_segundo_plato IS NULL THEN
+        RAISE ex_pedido_vacio;
+    END IF;
+
+    -- Comprobar la existencia y disponibilidad del primer plato, si se proporcionó
+    IF arg_id_primer_plato IS NOT NULL THEN
+        -- Verificar si el plato existe y está disponible
+        SELECT COUNT(*) INTO v_pedidos_activos
+        FROM platos
+        WHERE id_plato = arg_id_primer_plato
+          AND disponible = 1;
+
+        IF v_pedidos_activos = 0 THEN
+            RAISE ex_plato_no_disponible;
+        END IF;
+    END IF;
+
+    -- Comprobar la existencia y disponibilidad del segundo plato, si se proporcionó
+    IF arg_id_segundo_plato IS NOT NULL THEN
+        -- Verificar si el plato existe y está disponible
+
+        SELECT COUNT(*) INTO v_pedidos_activos
+        FROM platos
+        WHERE id_plato = arg_id_segundo_plato
+          AND disponible = 1;
+
+        IF v_pedidos_activos = 0 THEN
+            RAISE ex_plato_no_disponible;
+        END IF;
+    END IF;
+
+    -- Verificar la cantidad de pedidos activos del personal asignado
+    SELECT COUNT(*) INTO v_pedidos_activos
+    FROM pedidos
+    WHERE id_personal = arg_id_personal;
+
+    -- Comprobar si el personal ya tiene 5 pedidos activos
+    IF v_pedidos_activos >= 5 THEN
+        RAISE ex_personal_sobrecargado;
+    END IF;
+
+    -- Iniciar la transacción
+    BEGIN
+        -- Insertar el nuevo pedido
+        INSERT INTO pedidos (id_pedido, id_cliente, id_personal, fecha_pedido, total)
+        VALUES (1, arg_id_cliente, arg_id_personal, SYSDATE, 0);
+       
+        -- Insertar los detalles del pedido
+        IF arg_id_primer_plato IS NOT NULL THEN
+            INSERT INTO detalle_pedido (id_pedido, id_plato, cantidad)
+            VALUES (1, arg_id_primer_plato, 1);
+        END IF;
+
+        IF arg_id_segundo_plato IS NOT NULL THEN
+            INSERT INTO detalle_pedido (id_pedido, id_plato, cantidad)
+            VALUES (1, arg_id_segundo_plato, 1);
+        END IF;
+
+        -- Actualizar los pedidos activos del personal
+        UPDATE personal_servicio
+        SET pedidos_activos = pedidos_activos + 1
+        WHERE id_personal = arg_id_personal;
+
+        -- Confirmar la transacción
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            -- En caso de error, deshacer los cambios
+            ROLLBACK;
+            RAISE;
+    END;
+END;
 /
 
+
+
+
 ------ Deja aquí tus respuestas a las preguntas del enunciado:
--- NO SE CORREGIRÁN RESPUESTAS QUE NO ESTÉN AQUÍ (utiliza el espacio que necesites apra cada una)
+-- NO SE CORREGIRÁN RESPUESTAS QUE NO ESTÉN AQUÍ (utiliza el espacio que necesites para cada una)
 -- * P4.1 ¿Como garantizas en tu codigo que un miembro del persona de servicio no supere el lımite de pedidos activos?
 --
 -- * P4.2 ¿Cómo evitas que dos transacciones concurrentes asignen un pedido al mismo personal de servicio cuyos pedidos activos estan a punto de superar el límite?
@@ -151,12 +237,12 @@ CREATE OR REPLACE PROCEDURE test_registrar_pedido IS
     v_id_personal INTEGER;
     v_id_primer_plato INTEGER;
     v_id_segundo_plato INTEGER;
-BEGIN
+begin
     -- Inicializar los datos de prueba
     inicializa_test;
 
     -- Caso 1: Pedido correcto, se realiza exitosamente
-    BEGIN
+    begin
         -- Asignar valores válidos a las variables
         v_id_cliente := 1;
         v_id_personal := 1;
@@ -169,10 +255,10 @@ BEGIN
     EXCEPTION
         WHEN OTHERS THEN
             DBMS_OUTPUT.PUT_LINE('Caso 1: Error inesperado - ' || SQLERRM);
-    END;
+    end;
 
     -- Caso 2: Pedido vacío (sin platos), debe devolver el error -20002
-    BEGIN
+    begin
         registrar_pedido(v_id_cliente, v_id_personal, NULL, NULL);
         DBMS_OUTPUT.PUT_LINE('Caso 2: Error - Se esperaba una excepción por pedido vacío.');
     EXCEPTION
@@ -180,10 +266,10 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('Caso 2: Excepción capturada correctamente: Pedido vacío.');
         WHEN OTHERS THEN
             DBMS_OUTPUT.PUT_LINE('Caso 2: Error inesperado - ' || SQLERRM);
-    END;
+    end;
 
     -- Caso 3: Pedido con un plato que no existe, debe devolver el error -20004
-    BEGIN
+    begin
         registrar_pedido(v_id_cliente, v_id_personal, 999, NULL);
         DBMS_OUTPUT.PUT_LINE('Caso 3: Error - Se esperaba una excepción por plato inexistente.');
     EXCEPTION
@@ -191,13 +277,33 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('Caso 3: Excepción capturada correctamente: Plato no existe.');
         WHEN OTHERS THEN
             DBMS_OUTPUT.PUT_LINE('Caso 3: Error inesperado - ' || SQLERRM);
-    END;
+    end;
 
     -- Caso 4: Pedido con un plato no disponible, debe devolver el error -20001
-    BEGIN
+    begin
         -- Suponiendo que el plato con ID 3 no está disponible
-        registrar_pedido(v_id_cliente
+        registrar_pedido(v_id_cliente, v_id_personal, 3, NULL);
+        DBMS_OUTPUT.PUT_LINE('Caso 4: Error - Se esperaba una excepción por plato no disponible.');
+    EXCEPTION
+        WHEN ex_plato_no_disponible THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 4: Excepción capturada correctamente: Plato no disponible.');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 4: Error inesperado - ' || SQLERRM);
+    end;
 
+    -- Caso 5: Personal de servicio con 5 pedidos activos, debe devolver el error -20003
+    begin
+        -- Suponiendo que el personal con ID 2 ya tiene 5 pedidos activos
+        registrar_pedido(v_id_cliente, 2, v_id_primer_plato, v_id_segundo_plato);
+        DBMS_OUTPUT.PUT_LINE('Caso 5: Error - Se esperaba una excepción por personal sobrecargado.');
+    EXCEPTION
+        WHEN ex_personal_sobrecargado THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 5: Excepción capturada correctamente: Personal sobrecargado.');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Caso 5: Error inesperado - ' || SQLERRM);
+    end;
+end;
+/
 
 
 set serveroutput on;
